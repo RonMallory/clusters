@@ -1,0 +1,19 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: local-ron-mallory-apps
+  namespace: flux-system
+
+# Base configuration from parent local cluster
+resources:
+  - ../../../apps
+
+# Optional: Add developer-specific applications here
+# resources:
+#   - my-test-app.yaml
+#
+# patchesStrategicMerge:
+#   - app-patches.yaml
+

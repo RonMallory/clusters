@@ -1,0 +1,52 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: local-ron-mallory
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+        # Resource management for kubelet
+        system-reserved: "cpu=200m,memory=512Mi"
+        kube-reserved: "cpu=200m,memory=512Mi"
+        eviction-hard: "memory.available<100Mi,nodefs.available<10%"
+  - |
+    kind: KubeletConfiguration
+    # Kubelet resource configuration
+    maxPods: 50  # Limit pods per node for resource control
+    systemReserved:
+      cpu: "200m"
+      memory: "512Mi"
+    kubeReserved:
+      cpu: "200m"
+      memory: "512Mi"
+    enforceNodeAllocatable:
+    - pods
+    - system-reserved
+    - kube-reserved
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+- role: worker
+  kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    # Worker node resource limits
+    maxPods: 75
+    systemReserved:
+      cpu: "100m"
+      memory: "256Mi"
+    kubeReserved:
+      cpu: "100m"
+      memory: "256Mi"
+    enforceNodeAllocatable:
+    - pods
+    - system-reserved
+    - kube-reserved
