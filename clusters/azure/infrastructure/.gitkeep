@@ -1,0 +1,7 @@
+# Placeholder for Azure infrastructure configuration
+#
+# This directory will contain Azure-specific infrastructure components:
+# - Azure DNS external-dns configuration
+# - ACME DNS01 cert-manager ClusterIssuer
+# - Azure Container Storage Interface (CSI) drivers
+# - Workload Identity configurations

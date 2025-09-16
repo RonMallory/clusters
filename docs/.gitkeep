@@ -1,0 +1,7 @@
+# Placeholder for GCP infrastructure configuration
+#
+# This directory will contain GCP-specific infrastructure components:
+# - Cloud DNS external-dns configuration
+# - ACME DNS01 cert-manager ClusterIssuer
+# - GKE CSI drivers
+# - Workload Identity configurations

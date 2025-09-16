@@ -1,0 +1,8 @@
+# Placeholder for AWS infrastructure configuration
+#
+# This directory will contain AWS-specific infrastructure components:
+# - Route53 external-dns configuration
+# - ACME DNS01 cert-manager ClusterIssuer
+# - AWS Load Balancer Controller
+# - EBS CSI Driver
+# - IRSA configurations

@@ -1,0 +1,42 @@
+# yamllint configuration for Kubernetes manifests
+# Optimized for generated manifests and infrastructure-as-code
+
+extends: default
+
+rules:
+  # Disable line length checking - Kubernetes manifests often have long lines
+  line-length: disable
+
+  # Allow document start/end markers (---)
+  document-start: disable
+  document-end: disable
+
+  # Relax indentation rules for generated manifests
+  indentation: disable
+
+  # Allow trailing spaces (common in generated files)
+  trailing-spaces: disable
+
+  # Allow empty lines at end of file
+  empty-lines:
+    max-start: 0
+    max-end: 3
+    max: 2
+
+  # Allow comments indentation flexibility
+  comments-indentation: disable
+
+  # Be more lenient with brackets (for JSON-like structures in YAML)
+  brackets:
+    max-spaces-inside: 1
+    max-spaces-inside-empty: 0
+
+  # Be more lenient with braces
+  braces:
+    max-spaces-inside: 1
+    max-spaces-inside-empty: 0
+
+  # Allow truthy values (common in Kubernetes: on/off, yes/no)
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+    check-keys: false
