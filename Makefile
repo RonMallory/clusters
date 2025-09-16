@@ -139,7 +139,8 @@ kind-reset: ## Reset KIND cluster - delete and recreate (usage: make kind-reset 
 	fi
 
 .PHONY: kind-bootstrap
-kind-bootstrap: kind-create ## Bootstrap KIND cluster with Flux
+kind-bootstrap: kind-create ## Bootstrap KIND cluster with Flux (legacy - use apply-local instead)
+	@echo "$(YELLOW)Note: kind-bootstrap is deprecated. Use 'make apply-local' for personalized clusters.$(NC)"
 	@echo "Bootstrapping KIND cluster with Flux..."
 	@kubectl config use-context kind-local-cluster
 	@if [ -f bootstrap/local/flux-bootstrap.yaml ]; then \
@@ -152,11 +153,24 @@ kind-bootstrap: kind-create ## Bootstrap KIND cluster with Flux
 ##@ Deployment
 
 .PHONY: apply-local
-apply-local: check-tools ## Apply local cluster configurations
-	@echo "Applying local cluster configurations..."
-	@kubectl config use-context kind-local-cluster
-	@kustomize build clusters/local/infrastructure | kubectl apply -f -
-	@kustomize build clusters/local/apps | kubectl apply -f -
+apply-local: check-tools ## Create and apply personal developer cluster with Flux bootstrap
+	@echo "Setting up personal developer cluster..."
+	@$(SCRIPTS_DIR)/developer-setup.sh
+
+.PHONY: apply-local-no-commit
+apply-local-no-commit: check-tools ## Set up personal cluster without git commit/push
+	@echo "Setting up personal developer cluster (no git operations)..."
+	@$(SCRIPTS_DIR)/developer-setup.sh --no-commit
+
+.PHONY: apply-local-cluster-only
+apply-local-cluster-only: check-tools ## Create only the KIND cluster for personal development
+	@echo "Creating personal KIND cluster only..."
+	@$(SCRIPTS_DIR)/developer-setup.sh --cluster-only
+
+.PHONY: setup-local-flux
+setup-local-flux: check-tools ## Configure Flux to track local filesystem changes
+	@echo "Setting up local Flux development workflow..."
+	@$(SCRIPTS_DIR)/setup-local-flux.sh
 
 .PHONY: apply-kind
 apply-kind: ## Apply configurations to KIND cluster (NotImplemented)
