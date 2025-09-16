@@ -183,7 +183,7 @@ EOF
 commit_and_push_changes() {
     log_info "Committing and pushing personal cluster configuration..."
 
-    # Add the new overlay directory
+    # Add the new overlay directory including kind-config.yaml
     git add "$PERSONAL_OVERLAY_DIR/"
 
     # Check if there are changes to commit
@@ -213,6 +213,76 @@ User: $GIT_EMAIL"
     log_success "Changes committed and pushed to branch: $GIT_BRANCH"
 }
 
+# Create KIND cluster configuration
+create_kind_config() {
+    log_info "Creating KIND configuration for cluster: $CLUSTER_NAME..."
+
+    local kind_config_file="$PERSONAL_OVERLAY_DIR/kind-config.yaml"
+
+    # Skip if config already exists
+    if [[ -f "$kind_config_file" ]]; then
+        log_info "KIND config already exists: $kind_config_file"
+        return 0
+    fi
+
+    cat > "$kind_config_file" << EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: $CLUSTER_NAME
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+        # Resource management for kubelet
+        system-reserved: "cpu=200m,memory=512Mi"
+        kube-reserved: "cpu=200m,memory=512Mi"
+        eviction-hard: "memory.available<100Mi,nodefs.available<10%"
+  - |
+    kind: KubeletConfiguration
+    # Kubelet resource configuration
+    maxPods: 50  # Limit pods per node for resource control
+    systemReserved:
+      cpu: "200m"
+      memory: "512Mi"
+    kubeReserved:
+      cpu: "200m"
+      memory: "512Mi"
+    enforceNodeAllocatable:
+    - pods
+    - system-reserved
+    - kube-reserved
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+- role: worker
+  kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    # Worker node resource limits
+    maxPods: 75
+    systemReserved:
+      cpu: "100m"
+      memory: "256Mi"
+    kubeReserved:
+      cpu: "100m"
+      memory: "256Mi"
+    enforceNodeAllocatable:
+    - pods
+    - system-reserved
+    - kube-reserved
+EOF
+
+    log_success "KIND config created: $kind_config_file"
+}
+
 # Create KIND cluster
 create_kind_cluster() {
     log_info "Creating KIND cluster: $CLUSTER_NAME..."
@@ -224,8 +294,12 @@ create_kind_cluster() {
         return 0
     fi
 
-    # Create cluster using kind-cluster-manager
-    "$KIND_CLUSTER_MANAGER" create "$CLUSTER_NAME"
+    # Ensure KIND config exists
+    create_kind_config
+
+    # Create cluster using kind-cluster-manager with our config
+    local kind_config_file="$PERSONAL_OVERLAY_DIR/kind-config.yaml"
+    "$KIND_CLUSTER_MANAGER" create "$CLUSTER_NAME" --config "$kind_config_file"
 
     log_success "KIND cluster created: $CLUSTER_NAME"
 }
@@ -450,12 +524,19 @@ main() {
     get_git_info
 
     if [[ "$CLUSTER_ONLY" == "true" ]]; then
+        # Even for cluster-only, we need the overlay directory structure for kind-config
+        if [[ ! -d "$PERSONAL_OVERLAY_DIR" ]]; then
+            log_info "Creating minimal overlay directory for KIND config..."
+            mkdir -p "$PERSONAL_OVERLAY_DIR"
+        fi
+        create_kind_config
         create_kind_cluster
         show_status
         return 0
     fi
 
     create_personal_cluster_config
+    create_kind_config
 
     if [[ "$SKIP_COMMIT" == "false" ]]; then
         commit_and_push_changes

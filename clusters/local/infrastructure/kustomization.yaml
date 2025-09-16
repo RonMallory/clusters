@@ -13,3 +13,4 @@ resources:
   - kyverno.yaml           # Independent component
   - sealed-secrets.yaml    # Independent component
   - opentelemetry.yaml     # Depends on cert-manager
+  - metric-server.yaml     # Independent component
