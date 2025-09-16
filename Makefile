@@ -99,9 +99,13 @@ kind-create-custom: check-tools ## Create custom KIND cluster (usage: make kind-
 	fi
 
 .PHONY: kind-delete
-kind-delete: ## Delete KIND cluster
+kind-delete: ## Delete KIND cluster (usage: make kind-delete [NAME=cluster-name])
 	@echo "Deleting KIND cluster..."
-	@$(KIND_MANAGER_SCRIPT) delete
+	@if [ -n "$(NAME)" ]; then \
+		$(KIND_MANAGER_SCRIPT) delete $(NAME); \
+	else \
+		$(KIND_MANAGER_SCRIPT) delete; \
+	fi
 
 .PHONY: kind-delete-multi
 kind-delete-multi: ## Delete multiple KIND clusters (usage: make kind-delete-multi CLUSTERS="dev test staging")

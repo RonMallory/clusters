@@ -98,11 +98,12 @@ EOF
 
     log_success "Flux now tracks local git repository!"
     echo ""
-    echo "Development Workflow:"
-    echo "1. Make changes to cluster configs"
+    echo "🚀 GitOps Development Workflow:"
+    echo "1. Make changes to overlay configs in: clusters/local/overlay/$GIT_NAME_CLEAN/"
     echo "2. Commit locally: git add . && git commit -m 'your changes'"
     echo "3. Flux will sync automatically within 10-30 seconds"
-    echo "4. No push required for testing!"
+    echo "4. No push required for testing - pure local GitOps!"
+    echo "5. All deployments handled by Flux from Git commits"
 }
 
 # Setup filesystem watcher (alternative approach)
@@ -163,8 +164,15 @@ main() {
 
     echo ""
     echo "🎉 Local development setup complete!"
-    echo "Monitor Flux: flux get all"
-    echo "Watch logs: flux logs --follow"
+    echo ""
+    echo "📋 Monitoring Commands:"
+    echo "• Monitor Flux: flux get all"
+    echo "• Watch logs: flux logs --follow"
+    echo "• Check sources: flux get sources git"
+    echo "• View kustomizations: flux get kustomizations"
+    echo ""
+    echo "🎯 Remember: All deployments are now managed by Flux from Git commits!"
+    echo "✏️  Edit overlay files → commit → Flux auto-deploys"
 }
 
 main "$@"

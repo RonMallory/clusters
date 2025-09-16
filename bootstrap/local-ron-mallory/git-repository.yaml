@@ -1,0 +1,40 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m
+  ref:
+    branch: init/dev-xp
+  url: https://github.com/RonMallory/clusters.git
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: local-ron-mallory-infrastructure
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./clusters/local/overlay/ron-mallory/infrastructure
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: local-ron-mallory-apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./clusters/local/overlay/ron-mallory/apps
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: local-ron-mallory-infrastructure

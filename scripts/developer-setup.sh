@@ -262,6 +262,15 @@ bootstrap_flux() {
     local git_repo_url git_repo_resource
     git_repo_url=$(git remote get-url origin)
 
+    # Convert SSH URLs to HTTPS for Flux compatibility
+    if [[ "$git_repo_url" =~ ^git@github\.com:(.+)\.git$ ]]; then
+        git_repo_url="https://github.com/${BASH_REMATCH[1]}.git"
+        log_info "Converted SSH URL to HTTPS for Flux: $git_repo_url"
+    elif [[ "$git_repo_url" =~ ^git@(.+):(.+)\.git$ ]]; then
+        git_repo_url="https://${BASH_REMATCH[1]}/${BASH_REMATCH[2]}.git"
+        log_info "Converted SSH URL to HTTPS for Flux: $git_repo_url"
+    fi
+
     cat > "$bootstrap_dir/git-repository.yaml" << EOF
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -311,20 +320,33 @@ EOF
     log_success "Flux bootstrapped for cluster: $CLUSTER_NAME"
 }
 
-# Apply cluster configurations
-apply_cluster_configs() {
-    log_info "Applying cluster overlay configurations..."
+# Wait for Flux to apply configurations
+wait_for_flux_sync() {
+    log_info "Waiting for Flux to sync configurations from Git..."
 
     # Set kubectl context
     kubectl config use-context "kind-$CLUSTER_NAME"
 
-    # Apply infrastructure overlay
-    kustomize build "$PERSONAL_OVERLAY_DIR/infrastructure" | kubectl apply -f -
+    log_info "Flux will automatically apply configurations from: clusters/local/overlay/$GIT_NAME_CLEAN/"
+    log_info "This follows GitOps principles - all deployments come from Git!"
 
-    # Apply apps overlay
-    kustomize build "$PERSONAL_OVERLAY_DIR/apps" | kubectl apply -f -
+    # Give Flux some time to discover and start applying resources
+    log_info "Waiting 30 seconds for Flux to begin sync process..."
+    sleep 30
 
-    log_success "Cluster overlay configurations applied"
+    # Show Flux status
+    log_info "Current Flux status:"
+    if command -v flux >/dev/null 2>&1; then
+        flux get sources git -A || true
+        echo ""
+        flux get kustomizations -A || true
+    else
+        kubectl get gitrepositories -n flux-system || true
+        echo ""
+        kubectl get kustomizations -n flux-system || true
+    fi
+
+    log_success "Flux is now managing your cluster from Git repository!"
 }
 
 # Show cluster status
@@ -343,8 +365,13 @@ show_status() {
     echo "==========="
     echo "1. Switch to your cluster context: kubectl config use-context kind-$CLUSTER_NAME"
     echo "2. Check Flux status: flux get all"
-    echo "3. View cluster resources: kubectl get all -A"
-    echo "4. Delete cluster when done: kind delete cluster --name $CLUSTER_NAME"
+    echo "3. Monitor Flux logs: flux logs --follow"
+    echo "4. Watch deployments: kubectl get all -A --watch"
+    echo "5. Make changes to overlay files and push to git - Flux will auto-sync!"
+    echo "6. Delete cluster when done: kind delete cluster --name $CLUSTER_NAME"
+    echo ""
+    echo "🎯 GitOps Active: All deployments are managed by Flux from your Git repository!"
+    echo "📝 To customize: Edit files in $PERSONAL_OVERLAY_DIR and push to git"
 }
 
 # Help function
@@ -440,7 +467,7 @@ main() {
         bootstrap_flux
     fi
 
-    apply_cluster_configs
+    wait_for_flux_sync
     show_status
 }
 

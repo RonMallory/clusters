@@ -10,5 +10,6 @@ resources:
   # Flux Kustomizations with proper dependency management
   - cert-manager.yaml       # Base dependency
   - cnpg.yaml              # Independent component
+  - kyverno.yaml           # Independent component
   - sealed-secrets.yaml    # Independent component
   - opentelemetry.yaml     # Depends on cert-manager
