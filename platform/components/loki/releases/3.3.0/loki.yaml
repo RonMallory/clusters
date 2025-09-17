@@ -128,7 +128,7 @@ spec:
         app.kubernetes.io/instance: loki
         app.kubernetes.io/component: server
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        config.checksum: "loki-config"
     spec:
       serviceAccountName: loki
       securityContext:

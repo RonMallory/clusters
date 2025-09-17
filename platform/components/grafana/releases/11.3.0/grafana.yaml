@@ -274,8 +274,8 @@ spec:
         app.kubernetes.io/name: grafana
         app.kubernetes.io/instance: grafana
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/datasources: {{ include (print $.Template.BasePath "/datasources-configmap.yaml") . | sha256sum }}
+        config.checksum: "grafana-config"
+        datasources.checksum: "grafana-datasources"
     spec:
       serviceAccountName: grafana
       securityContext:

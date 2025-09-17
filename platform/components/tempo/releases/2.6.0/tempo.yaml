@@ -121,7 +121,7 @@ spec:
         app.kubernetes.io/instance: tempo
         app.kubernetes.io/component: server
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        config.checksum: "tempo-config"
     spec:
       serviceAccountName: tempo
       securityContext:
