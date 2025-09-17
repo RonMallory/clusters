@@ -1,0 +1,428 @@
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector-gateway
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/instance: otel-collector-gateway
+    app.kubernetes.io/version: "0.97.0"
+    app.kubernetes.io/component: gateway
+spec:
+  image: otel/opentelemetry-collector-contrib:0.97.0
+  mode: deployment
+  replicas: 2
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 400Mi
+
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Jaeger receiver for legacy compatibility
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+          thrift_binary:
+            endpoint: 0.0.0.0:6832
+
+      # Zipkin receiver
+      zipkin:
+        endpoint: 0.0.0.0:9411
+
+      # Prometheus receiver for metrics scraping
+      prometheus:
+        config:
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'otel-collector'
+              static_configs:
+                - targets: ['localhost:8888']
+
+    processors:
+      # Batch processor for better performance
+      batch:
+        send_batch_size: 1024
+        timeout: 2s
+        send_batch_max_size: 2048
+
+      # Memory limiter to prevent OOM
+      memory_limiter:
+        limit_mib: 1500
+        spike_limit_mib: 300
+
+      # Resource processor to add cluster info
+      resource:
+        attributes:
+          - key: cluster.name
+            value: "local-cluster"
+            action: insert
+          - key: k8s.cluster.name
+            value: "local-cluster"
+            action: insert
+
+      # K8s attributes processor
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
+        filter:
+          node_from_env_var: KUBE_NODE_NAME
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.node.name
+            - k8s.namespace.name
+            - k8s.pod.start_time
+            - k8s.replicaset.name
+            - k8s.replicaset.uid
+            - k8s.daemonset.name
+            - k8s.daemonset.uid
+            - k8s.job.name
+            - k8s.job.uid
+            - k8s.container.name
+            - k8s.cronjob.name
+            - k8s.statefulset.name
+            - k8s.statefulset.uid
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: connection
+
+    exporters:
+      # Tempo for traces
+      otlp/tempo:
+        endpoint: tempo.observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+      # Loki for logs
+      loki:
+        endpoint: http://loki.observability.svc.cluster.local:3100/loki/api/v1/push
+        tenant_id: ""
+        labels:
+          resource:
+            k8s.pod.name: "pod_name"
+            k8s.namespace.name: "namespace"
+            k8s.container.name: "container"
+          attributes:
+            severity: "level"
+
+      # Prometheus for metrics (if available)
+      prometheusremotewrite:
+        endpoint: http://prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+        tls:
+          insecure: true
+
+      # Logging exporter for debugging
+      logging:
+        verbosity: basic
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [otlp/tempo, logging]
+
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [prometheusremotewrite, logging]
+
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [loki, logging]
+
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector-agent
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/instance: otel-collector-agent
+    app.kubernetes.io/version: "0.97.0"
+    app.kubernetes.io/component: agent
+spec:
+  image: otel/opentelemetry-collector-contrib:0.97.0
+  mode: daemonset
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 200Mi
+
+  env:
+    - name: KUBE_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+  volumeMounts:
+    - name: varlogpods
+      mountPath: /var/log/pods
+      readOnly: true
+    - name: varlibdockercontainers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+    - name: varlogjournal
+      mountPath: /var/log/journal
+      readOnly: true
+    - name: etcmachineid
+      mountPath: /etc/machine-id
+      readOnly: true
+
+  volumes:
+    - name: varlogpods
+      hostPath:
+        path: /var/log/pods
+    - name: varlibdockercontainers
+      hostPath:
+        path: /var/lib/docker/containers
+    - name: varlogjournal
+      hostPath:
+        path: /var/log/journal
+    - name: etcmachineid
+      hostPath:
+        path: /etc/machine-id
+
+  config: |
+    receivers:
+      # OTLP receiver
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # File log receiver for container logs
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          # Exclude otel collector logs to avoid loops
+          - /var/log/pods/observability_otel-collector-*/**/*.log
+          - /var/log/pods/kube-system_*/**/*.log
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          # Parse container logs
+          - type: regex_parser
+            id: get-format
+            regex: '^(?P<time>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s(?P<stream>stdout|stderr)\s(?P<logtag>P|F)\s?(?P<log>.*)$'
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+          - type: recombine
+            id: recombine-logs
+            combine_field: attributes.log
+            source_identifier: attributes["log.file.path"]
+            is_last_entry: "attributes.logtag == 'F'"
+          - type: move
+            from: attributes.log
+            to: body
+          - type: move
+            from: attributes.stream
+            to: attributes["stream"]
+          - type: move
+            from: attributes["log.file.path"]
+            to: attributes["log.file.path"]
+
+      # Host metrics
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu:
+          disk:
+          filesystem:
+          memory:
+          network:
+          load:
+
+      # kubelet stats
+      kubeletstats:
+        collection_interval: 30s
+        auth_type: "serviceAccount"
+        endpoint: "https://${env:KUBE_NODE_NAME}:10250"
+        insecure_skip_verify: true
+        metric_groups:
+          - node
+          - pod
+          - container
+
+    processors:
+      # Batch processor
+      batch:
+        send_batch_size: 512
+        timeout: 1s
+
+      # Memory limiter
+      memory_limiter:
+        limit_mib: 800
+        spike_limit_mib: 200
+
+      # Resource processor
+      resource:
+        attributes:
+          - key: cluster.name
+            value: "local-cluster"
+            action: insert
+          - key: k8s.cluster.name
+            value: "local-cluster"
+            action: insert
+
+      # K8s attributes
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
+        filter:
+          node_from_env_var: KUBE_NODE_NAME
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.node.name
+            - k8s.namespace.name
+            - k8s.pod.start_time
+            - k8s.replicaset.name
+            - k8s.replicaset.uid
+            - k8s.daemonset.name
+            - k8s.daemonset.uid
+            - k8s.job.name
+            - k8s.job.uid
+            - k8s.container.name
+            - k8s.cronjob.name
+            - k8s.statefulset.name
+            - k8s.statefulset.uid
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: connection
+
+    exporters:
+      # Forward to gateway collector
+      otlp:
+        endpoint: otel-collector-gateway-collector.observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+      # Logging for debugging
+      logging:
+        verbosity: basic
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [otlp]
+
+        metrics:
+          receivers: [otlp, hostmetrics, kubeletstats]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [otlp]
+
+        logs:
+          receivers: [otlp, filelog]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [otlp]
+
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/version: "0.97.0"
+rules:
+- apiGroups: [""]
+  resources: ["pods", "namespaces", "nodes", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["replicasets", "daemonsets", "deployments", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions"]
+  resources: ["replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/version: "0.97.0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+- kind: ServiceAccount
+  name: otel-collector-gateway-collector
+  namespace: observability
+- kind: ServiceAccount
+  name: otel-collector-agent-collector
+  namespace: observability

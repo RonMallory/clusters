@@ -42,6 +42,47 @@ install_podman() {
     esac
 }
 
+install_docker() {
+    case $OS in
+        "macos") brew install --cask docker ;;
+        "linux")
+            # Install Docker using official script
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sudo sh get-docker.sh
+            sudo usermod -aG docker $USER
+            rm get-docker.sh
+            echo -e "${YELLOW}Note: You may need to log out and back in for Docker group permissions to take effect${NC}"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+install_container_runtime() {
+    echo -e "${BLUE}No container runtime found. Choose installation option:${NC}"
+    echo "1) Docker (recommended for most users)"
+    echo "2) Podman (alternative to Docker)"
+    echo "3) Skip container runtime installation"
+
+    read -p "Choose [1-3]: " choice
+
+    case $choice in
+        1)
+            install_docker
+            ;;
+        2)
+            install_podman
+            ;;
+        3)
+            echo "Skipping container runtime installation"
+            return 1
+            ;;
+        *)
+            echo "Invalid choice, defaulting to Docker"
+            install_docker
+            ;;
+    esac
+}
+
 install_helm() {
     case $OS in
         "macos") brew install helm ;;
@@ -219,7 +260,7 @@ install_missing_tools() {
 # Check for missing tools (reuse logic from check-tools.sh)
 get_missing_tools() {
     local required_tools=(
-        "podman" "helm" "kubectl" "kind" "flux" "terraform" "cdk"
+        "helm" "kubectl" "kind" "flux" "terraform" "cdk"
         "kustomize" "yq" "make"
         "kubescape" "trivy" "trufflehog" "pluto" "yamllint"
     )
@@ -231,6 +272,11 @@ get_missing_tools() {
             missing_tools+=("$tool")
         fi
     done
+
+    # Check for container runtime - if neither exists, suggest one
+    if ! command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+        missing_tools+=("container-runtime")
+    fi
 
     echo "${missing_tools[@]}"
 }
@@ -280,9 +326,10 @@ main() {
     case "${1:-}" in
         "--list"|"-l")
             echo "Available tools for installation:"
-            for tool in podman helm kubectl kind flux terraform cdk kustomize yq make kubescape trivy trufflehog pluto yamllint; do
+            for tool in docker podman helm kubectl kind flux terraform cdk kustomize yq make kubescape trivy trufflehog pluto yamllint; do
                 echo "  - $tool"
             done
+            echo "  - container-runtime (installs Docker or Podman)"
             exit 0
             ;;
         "--help"|"-h")
@@ -297,6 +344,8 @@ main() {
             echo "Examples:"
             echo "  $0 --all                    # Install all missing tools"
             echo "  $0 kubectl helm             # Install specific tools"
+            echo "  $0 container-runtime        # Install Docker or Podman"
+            echo "  $0 docker                   # Install Docker specifically"
             echo "  $0 --scan-only              # Install only scanning tools"
             exit 0
             ;;

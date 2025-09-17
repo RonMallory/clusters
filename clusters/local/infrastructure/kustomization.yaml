@@ -14,3 +14,8 @@ resources:
   - sealed-secrets.yaml    # Independent component
   - opentelemetry.yaml     # Depends on cert-manager
   - metric-server.yaml     # Independent component
+  # Observability Stack (OTel-centric)
+  - loki.yaml              # Log aggregation - depends on cert-manager
+  - tempo.yaml             # Distributed tracing - depends on cert-manager
+  # - grafana.yaml           # Visualization - depends on loki, tempo
+  - otel-collector.yaml    # Telemetry collection - depends on opentelemetry, loki, tempo

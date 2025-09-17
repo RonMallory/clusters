@@ -405,11 +405,45 @@ wait_for_flux_sync() {
     log_info "This follows GitOps principles - all deployments come from Git!"
 
     # Give Flux some time to discover and start applying resources
-    log_info "Waiting 30 seconds for Flux to begin sync process..."
-    sleep 30
+    log_info "Waiting for Git repository to be ready..."
+    kubectl -n flux-system wait --for=condition=ready gitrepository/flux-system --timeout=300s
 
-    # Show Flux status
-    log_info "Current Flux status:"
+    # Wait for main infrastructure kustomization to be ready
+    log_info "Waiting for infrastructure kustomization to be ready..."
+    kubectl -n flux-system wait --for=condition=ready kustomization/"$CLUSTER_NAME-infrastructure" --timeout=600s
+
+    # Wait for individual infrastructure components to reconcile
+    local infrastructure_components=(
+        "cert-manager"
+        "cnpg"
+        "kyverno"
+        "sealed-secrets"
+        "opentelemetry"
+        "metric-server"
+    )
+
+    log_info "Waiting for individual infrastructure components to reconcile..."
+    for component in "${infrastructure_components[@]}"; do
+        log_info "Waiting for $component to be ready..."
+        if kubectl -n flux-system get kustomization "$component" >/dev/null 2>&1; then
+            kubectl -n flux-system wait --for=condition=ready kustomization/"$component" --timeout=600s
+            log_success "$component is ready"
+        else
+            log_warning "$component kustomization not found, skipping..."
+        fi
+    done
+
+    # Wait for apps kustomization to be ready (if it exists)
+    log_info "Waiting for apps kustomization to be ready..."
+    if kubectl -n flux-system get kustomization "$CLUSTER_NAME-apps" >/dev/null 2>&1; then
+        kubectl -n flux-system wait --for=condition=ready kustomization/"$CLUSTER_NAME-apps" --timeout=300s
+        log_success "Apps kustomization is ready"
+    else
+        log_info "No apps kustomization found, skipping..."
+    fi
+
+    # Show final Flux status
+    log_info "Final Flux status:"
     if command -v flux >/dev/null 2>&1; then
         flux get sources git -A || true
         echo ""
@@ -420,7 +454,7 @@ wait_for_flux_sync() {
         kubectl get kustomizations -n flux-system || true
     fi
 
-    log_success "Flux is now managing your cluster from Git repository!"
+    log_success "All Flux components are ready and reconciled!"
 }
 
 # Show cluster status

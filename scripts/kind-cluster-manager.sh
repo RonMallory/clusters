@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Variables
 SCRIPT_NAME=$(basename "$0")
-KIND_PROVIDER="podman"
+KIND_PROVIDER=""  # Will be auto-detected
 DEFAULT_CLUSTER_NAME="local-cluster"
 CLUSTERS_DIR="$(dirname "$0")/../clusters/local"
 KIND_CONFIG_FILE="${CLUSTERS_DIR}/kind-config.yaml"
@@ -33,6 +33,28 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+# Detect available container runtime
+detect_container_runtime() {
+    if command -v docker >/dev/null 2>&1; then
+        if docker info >/dev/null 2>&1; then
+            KIND_PROVIDER="docker"
+            log_info "Detected Docker as container runtime"
+            return 0
+        else
+            log_warning "Docker found but not running"
+        fi
+    fi
+
+    if command -v podman >/dev/null 2>&1; then
+        KIND_PROVIDER="podman"
+        log_info "Detected Podman as container runtime"
+        return 0
+    fi
+
+    log_error "Neither Docker nor Podman found or running"
+    return 1
 }
 
 # Help function
@@ -88,7 +110,7 @@ EXAMPLES:
     $SCRIPT_NAME delete-all
 
 ENVIRONMENT:
-    Uses $KIND_PROVIDER provider (automatically configured)
+    Auto-detects Docker or Podman as container runtime
 
 EOF
 }
@@ -101,10 +123,6 @@ check_prerequisites() {
         missing_tools+=("kind")
     fi
 
-    if ! command -v podman >/dev/null 2>&1; then
-        missing_tools+=("podman")
-    fi
-
     if ! command -v kubectl >/dev/null 2>&1; then
         missing_tools+=("kubectl")
     fi
@@ -112,6 +130,12 @@ check_prerequisites() {
     if [ ${#missing_tools[@]} -ne 0 ]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         log_info "Please install missing tools and try again"
+        exit 1
+    fi
+
+    # Detect and set container runtime
+    if ! detect_container_runtime; then
+        log_error "Please install either Docker or Podman"
         exit 1
     fi
 }
@@ -171,8 +195,11 @@ create_cluster() {
         return 0
     fi
 
-    # Set Podman as the provider
-    export KIND_EXPERIMENTAL_PROVIDER="$KIND_PROVIDER"
+    # Set container runtime provider (Docker or Podman)
+    if [[ "$KIND_PROVIDER" == "podman" ]]; then
+        export KIND_EXPERIMENTAL_PROVIDER="podman"
+    fi
+    # Note: Docker is KIND's default, no need to set provider for Docker
 
     # Use provided config or generate one
     if [ -z "$config_file" ]; then

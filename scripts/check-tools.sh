@@ -12,7 +12,6 @@ NC='\033[0m' # No Color
 
 # Tools to check
 REQUIRED_TOOLS=(
-    "podman"
     "helm"
     "kubectl"
     "kind"
@@ -67,6 +66,43 @@ get_tool_version() {
     esac
 }
 
+# Check for container runtime (Docker or Podman)
+check_container_runtime() {
+    local runtime_found=false
+    local runtime_info=""
+
+    if command -v docker >/dev/null 2>&1; then
+        if docker info >/dev/null 2>&1; then
+            local docker_version=$(docker --version 2>/dev/null | head -1 || echo "version unknown")
+            printf "${GREEN}✓${NC} %-12s %s\n" "docker" "$docker_version (running)"
+            runtime_found=true
+            runtime_info="docker (running)"
+        else
+            printf "${YELLOW}⚠${NC} %-12s %s\n" "docker" "installed but not running"
+        fi
+    fi
+
+    if command -v podman >/dev/null 2>&1; then
+        local podman_version=$(podman --version 2>/dev/null | head -1 || echo "version unknown")
+        printf "${GREEN}✓${NC} %-12s %s\n" "podman" "$podman_version"
+        runtime_found=true
+        if [[ -z "$runtime_info" ]]; then
+            runtime_info="podman"
+        else
+            runtime_info="$runtime_info, podman"
+        fi
+    fi
+
+    if [[ "$runtime_found" == "true" ]]; then
+        FOUND_TOOLS+=("container-runtime")
+        return 0
+    else
+        printf "${RED}✗${NC} %-12s %s\n" "container-runtime" "neither docker nor podman found"
+        MISSING_TOOLS+=("docker-or-podman")
+        return 1
+    fi
+}
+
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if command -v "$tool" >/dev/null 2>&1; then
         version=$(get_tool_version "$tool")
@@ -78,10 +114,15 @@ for tool in "${REQUIRED_TOOLS[@]}"; do
     fi
 done
 
+# Check for container runtime
+check_container_runtime
+
 echo ""
 echo "Summary:"
 echo "==============================="
-printf "${GREEN}Found tools:${NC} %d/%d\n" "${#FOUND_TOOLS[@]}" "${#REQUIRED_TOOLS[@]}"
+# Calculate total expected tools (required tools + container runtime)
+total_expected=$((${#REQUIRED_TOOLS[@]} + 1))
+printf "${GREEN}Found tools:${NC} %d/%d\n" "${#FOUND_TOOLS[@]}" "$total_expected"
 
 if [ ${#MISSING_TOOLS[@]} -ne 0 ]; then
     printf "${RED}Missing tools:${NC} %s\n" "${MISSING_TOOLS[*]}"

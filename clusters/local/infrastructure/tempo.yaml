@@ -1,0 +1,27 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tempo
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./platform/components/tempo/releases/2.6.0/
+  prune: true
+  wait: true
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: cert-manager
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: StatefulSet
+      name: tempo
+      namespace: observability
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: tempo-query-frontend
+      namespace: observability
+
