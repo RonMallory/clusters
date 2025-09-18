@@ -7,4 +7,4 @@ metadata:
   namespace: flux-system
 
 resources:
-  - kubernetes.yaml
+  - ./kubernetes.yml

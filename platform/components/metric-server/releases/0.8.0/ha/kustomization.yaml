@@ -7,4 +7,4 @@ metadata:
   namespace: flux-system
 
 resources:
-  - high-availability-1.12+.yaml
+  - ./high-availability-1.21+.yaml

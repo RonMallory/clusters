@@ -7,6 +7,7 @@ SHELL := /bin/bash
 SCRIPTS_DIR := scripts
 CHECK_TOOLS_SCRIPT := $(SCRIPTS_DIR)/check-tools.sh
 INSTALL_TOOLS_SCRIPT := $(SCRIPTS_DIR)/install-tools.sh
+VALIDATE_MANIFESTS_SCRIPT := $(SCRIPTS_DIR)/validate-manifests.sh
 SCAN_MANIFESTS_SCRIPT := $(SCRIPTS_DIR)/scan-manifests.sh
 SCAN_SECRETS_SCRIPT := $(SCRIPTS_DIR)/scan-secrets.sh
 KIND_MANAGER_SCRIPT := $(SCRIPTS_DIR)/kind-cluster-manager.sh
@@ -39,16 +40,49 @@ check-tools: ## Check for required development and deployment tools
 ##@ Development
 
 .PHONY: validate
-validate: check-tools ## Validate all Kubernetes manifests and configurations
-	@echo "Validating Kubernetes manifests..."
-	@find . -name "*.yaml" -o -name "*.yml" | grep -E "(kustomization|helmrelease)" | while read -r file; do \
-		echo "Validating $$file"; \
-		kubectl apply --dry-run=client --validate=true -f "$$file" > /dev/null 2>&1 || { \
-			echo "$(RED)Error validating $$file$(NC)"; \
-			exit 1; \
-		}; \
-	done
-	@echo "$(GREEN)All manifests validated successfully$(NC)"
+validate: check-tools ## Comprehensive validation of all Kubernetes manifests and configurations (usage: make validate [DIR=path])
+	@echo "Running comprehensive manifest validation..."
+	@if [ -n "$(DIR)" ]; then \
+		$(VALIDATE_MANIFESTS_SCRIPT) --verbose "$(DIR)"; \
+	else \
+		$(VALIDATE_MANIFESTS_SCRIPT) --verbose; \
+	fi
+
+.PHONY: validate-quick
+validate-quick: check-tools ## Quick validation with essential validators only (usage: make validate-quick [DIR=path])
+	@echo "Running quick manifest validation..."
+	@if [ -n "$(DIR)" ]; then \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators yaml,kubectl "$(DIR)"; \
+	else \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators yaml,kubectl; \
+	fi
+
+.PHONY: validate-syntax
+validate-syntax: ## YAML syntax validation only (usage: make validate-syntax [DIR=path])
+	@echo "Running YAML syntax validation..."
+	@if [ -n "$(DIR)" ]; then \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators yaml "$(DIR)"; \
+	else \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators yaml; \
+	fi
+
+.PHONY: validate-kustomize
+validate-kustomize: check-tools ## Validate Kustomize configurations only (usage: make validate-kustomize [DIR=path])
+	@echo "Running Kustomize validation..."
+	@if [ -n "$(DIR)" ]; then \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators kustomize "$(DIR)"; \
+	else \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators kustomize; \
+	fi
+
+.PHONY: validate-deprecated
+validate-deprecated: check-tools ## Check for deprecated APIs only (usage: make validate-deprecated [DIR=path])
+	@echo "Checking for deprecated APIs..."
+	@if [ -n "$(DIR)" ]; then \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators deprecated-apis "$(DIR)"; \
+	else \
+		$(VALIDATE_MANIFESTS_SCRIPT) --validators deprecated-apis; \
+	fi
 
 .PHONY: lint
 lint: check-tools ## Lint YAML files for syntax and style
@@ -231,7 +265,13 @@ clean-reports: ## Clean up old scanning reports (keeps last 5 of each type)
 		cd reports/manifest-scans && \
 		ls -1dt */ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true; \
 		REMAINING=$$(ls -1d */ 2>/dev/null | wc -l || echo 0); \
-		echo "$(GREEN)Manifest reports cleaned ($$REMAINING remaining)$(NC)"; \
+		echo "$(GREEN)Manifest scan reports cleaned ($$REMAINING remaining)$(NC)"; \
+	fi
+	@if [ -d "reports/validation" ]; then \
+		cd reports/validation && \
+		ls -1dt */ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true; \
+		REMAINING=$$(ls -1d */ 2>/dev/null | wc -l || echo 0); \
+		echo "$(GREEN)Validation reports cleaned ($$REMAINING remaining)$(NC)"; \
 	fi
 	@if [ -d "reports/secret-scans" ]; then \
 		cd reports/secret-scans && \
@@ -244,6 +284,17 @@ clean-reports: ## Clean up old scanning reports (keeps last 5 of each type)
 list-reports: ## List available scan reports
 	@echo "Available Scan Reports:"
 	@echo "======================"
+	@if [ -d "reports/validation" ]; then \
+		echo "$(BLUE)Validation Reports:$(NC)"; \
+		cd reports/validation && \
+		for dir in $$(ls -1dt */ 2>/dev/null | head -5); do \
+			echo "  ✅ $$dir"; \
+			if [ -f "$$dir/validation-summary.txt" ]; then \
+				head -1 "$$dir/validation-summary.txt" | sed 's/^/     /'; \
+			fi; \
+		done; \
+		echo ""; \
+	fi
 	@if [ -d "reports/manifest-scans" ]; then \
 		echo "$(BLUE)Manifest Scans:$(NC)"; \
 		cd reports/manifest-scans && \
