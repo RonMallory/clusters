@@ -10,10 +10,11 @@ metadata:
 resources:
   - ../../../infrastructure
 
-# Optional: Add developer-specific customizations here
-# patchesStrategicMerge:
-#   - custom-patches.yaml
-#
-# resources:
-#   - developer-specific-resources.yaml
+# KIND-specific patches
+patches:
+  - path: metric-server-patch.yaml
+    target:
+      kind: Deployment
+      name: metrics-server
+      namespace: kube-system
 
