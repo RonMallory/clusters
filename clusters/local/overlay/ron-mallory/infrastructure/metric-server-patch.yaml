@@ -1,17 +1,9 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: metrics-server
-  namespace: kube-system
-spec:
-  template:
-    spec:
-      containers:
-      - name: metrics-server
-        args:
-        - --cert-dir=/tmp
-        - --secure-port=10250
-        - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
-        - --kubelet-use-node-status-port
-        - --metric-resolution=15s
-        - --kubelet-insecure-tls  # Required for KIND clusters
+- op: replace
+  path: /spec/template/spec/containers/0/args
+  value:
+    - --cert-dir=/tmp
+    - --secure-port=10250
+    - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+    - --kubelet-use-node-status-port
+    - --metric-resolution=15s
+    - --kubelet-insecure-tls  # Required for KIND clusters
