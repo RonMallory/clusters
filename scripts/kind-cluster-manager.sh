@@ -37,6 +37,14 @@ log_error() {
 
 # Detect available container runtime
 detect_container_runtime() {
+    # Check for Podman first
+    if command -v podman >/dev/null 2>&1; then
+        KIND_PROVIDER="podman"
+        log_info "Detected Podman as container runtime"
+        return 0
+    fi
+
+    # Fall back to Docker if Podman is not available
     if command -v docker >/dev/null 2>&1; then
         if docker info >/dev/null 2>&1; then
             KIND_PROVIDER="docker"
@@ -45,12 +53,6 @@ detect_container_runtime() {
         else
             log_warning "Docker found but not running"
         fi
-    fi
-
-    if command -v podman >/dev/null 2>&1; then
-        KIND_PROVIDER="podman"
-        log_info "Detected Podman as container runtime"
-        return 0
     fi
 
     log_error "Neither Docker nor Podman found or running"

@@ -7,6 +7,8 @@ metadata:
   namespace: flux-system
 
 resources:
+  # Helm Sources
+  - ../../../platform/sources/grafana.yaml
   # Flux Kustomizations with proper dependency management
   - cert-manager.yaml       # Base dependency
   - cnpg.yaml              # Independent component
@@ -15,7 +17,7 @@ resources:
   - opentelemetry.yaml     # Depends on cert-manager
   - metric-server.yaml     # Independent component
   # Observability Stack (OTel-centric)
-  - loki.yaml              # Log aggregation - depends on cert-manager
+  - loki.yaml              # Log aggregation - depends on cert-manager, grafana helm repo
   - tempo.yaml             # Distributed tracing - depends on cert-manager
   # - grafana.yaml           # Visualization - depends on loki, tempo
   - otel-collector.yaml    # Telemetry collection - depends on opentelemetry, loki, tempo

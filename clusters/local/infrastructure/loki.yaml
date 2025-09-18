@@ -16,8 +16,13 @@ spec:
     name: flux-system
   dependsOn:
     - name: cert-manager
+    - name: grafana
   healthChecks:
     - apiVersion: apps/v1
       kind: StatefulSet
       name: loki
       namespace: observability
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: loki
+      namespace: flux-system
